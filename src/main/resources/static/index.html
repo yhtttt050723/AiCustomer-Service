@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 工单系统演示</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f5f7fa; color: #111; }
+    .container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }
+    textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid #d0d7de; border-radius: 6px; }
+    button { background: #0969da; color: #fff; border: 0; padding: 10px 14px; border-radius: 6px; cursor: pointer; }
+    button:disabled { background: #8cb4e8; cursor: not-allowed; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .muted { color: #667; font-size: 13px; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef; font-size: 12px; }
+    ul { margin-top: 8px; }
+    code { background: #f0f2f5; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { useState } = React;
+
+  function App() {
+    const [question, setQuestion] = useState("怎么请假");
+    const [ticket, setTicket] = useState(null);
+    const [metrics, setMetrics] = useState(null);
+    const [knowledge, setKnowledge] = useState([]);
+    const [systemStatus, setSystemStatus] = useState(null);
+    const [promptHistory, setPromptHistory] = useState([]);
+    const [systemPanel, setSystemPanel] = useState(null);
+    const [streamAnswer, setStreamAnswer] = useState("");
+    const [sessionId, setSessionId] = useState("u001");
+    const [runtimeApiKey, setRuntimeApiKey] = useState(localStorage.getItem("deepseek_api_key") || "");
+    const [deepSeekTest, setDeepSeekTest] = useState(null);
+    const [rollbackVersion, setRollbackVersion] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [attachTitle, setAttachTitle] = useState("");
+    const [attachFile, setAttachFile] = useState(null);
+    const [attachResult, setAttachResult] = useState(null);
+
+    const loadKnowledge = async () => {
+      const res = await fetch("/api/knowledge/titles");
+      const items = await res.json();
+      setKnowledge(items);
+      if (!attachTitle && items && items.length > 0) {
+        setAttachTitle(items[0]);
+      }
+    };
+
+    const loadMetrics = async () => {
+      const res = await fetch("/api/tickets/metrics/hitrate");
+      setMetrics(await res.json());
+    };
+
+    const loadSystemStatus = async () => {
+      const res = await fetch("/api/system/status");
+      setSystemStatus(await res.json());
+    };
+
+    const loadPromptHistory = async () => {
+      const res = await fetch("/api/prompts/history?key=ticket.system");
+      setPromptHistory(await res.json());
+    };
+
+    const loadSystemPanel = async () => {
+      const res = await fetch("/api/system/panel");
+      setSystemPanel(await res.json());
+    };
+
+    const ask = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/tickets/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, apiKey: runtimeApiKey })
+        });
+        const data = await res.json();
+        setTicket(data);
+        await loadMetrics();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const askStream = async () => {
+      setLoading(true);
+      setStreamAnswer("");
+      try {
+        const res = await fetch("/api/tickets/ask/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, sessionId, apiKey: runtimeApiKey })
+        });
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          setStreamAnswer(prev => prev + decoder.decode(value, { stream: true }));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const rollbackPrompt = async () => {
+      if (!rollbackVersion) return;
+      await fetch("/api/prompts/rollback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptKey: "ticket.system",
+          targetVersion: Number(rollbackVersion),
+          changeNote: "rollback from frontend"
+        })
+      });
+      await loadPromptHistory();
+      await loadSystemStatus();
+    };
+
+    const saveApiKey = () => {
+      localStorage.setItem("deepseek_api_key", runtimeApiKey || "");
+      testApiKey();
+    };
+
+    const clearApiKey = () => {
+      setRuntimeApiKey("");
+      localStorage.removeItem("deepseek_api_key");
+      setDeepSeekTest(null);
+      alert("DeepSeek API Key 已从浏览器本地存储清除");
+    };
+
+    const testApiKey = async () => {
+      if (!runtimeApiKey) {
+        setDeepSeekTest({ ok: false, message: "未填写 API Key" });
+        return;
+      }
+      try {
+        const res = await fetch("/api/system/deepseek/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ apiKey: runtimeApiKey })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          setDeepSeekTest({ ok: false, message: text });
+          return;
+        }
+        const text = await res.text();
+        setDeepSeekTest({ ok: true, message: text });
+        alert("DeepSeek Key 测试成功");
+      } catch (e) {
+        setDeepSeekTest({ ok: false, message: String(e) });
+      }
+    };
+
+    React.useEffect(() => {
+      loadKnowledge();
+      loadMetrics();
+      loadSystemStatus();
+      loadPromptHistory();
+      loadSystemPanel();
+    }, []);
+
+    const sourceFromTitle = (title) => "kb://manual/" + String(title || "").replaceAll(" ", "-");
+
+    const uploadAttachment = async () => {
+      if (!attachTitle) {
+        alert("请选择知识库标题");
+        return;
+      }
+      if (!attachFile) {
+        alert("请选择要上传的文件");
+        return;
+      }
+      setLoading(true);
+      setAttachResult(null);
+      try {
+        const fd = new FormData();
+        fd.append("source", sourceFromTitle(attachTitle));
+        fd.append("file", attachFile);
+        const res = await fetch("/api/knowledge/attachments/upload", { method: "POST", body: fd });
+        if (!res.ok) {
+          const text = await res.text();
+          setAttachResult({ ok: false, message: text });
+          return;
+        }
+        const data = await res.json();
+        setAttachResult({ ok: true, message: "上传成功", data });
+      } catch (e) {
+        setAttachResult({ ok: false, message: String(e) });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <div className="container">
+        <h2>AI 工单系统（React 联调页）</h2>
+        <div className="card">
+          <div className="muted">流程：客户提问 -> AI回答 -> 低置信度转一线 -> 一线可升级二线</div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <label>DeepSeek API Key:</label>
+            <input
+              type="password"
+              value={runtimeApiKey}
+              onChange={(e) => setRuntimeApiKey(e.target.value)}
+              placeholder="前端本地保存，仅用于本地联调"
+              style={{ minWidth: 360 }}
+            />
+            <button onClick={saveApiKey}>保存Key</button>
+            <button onClick={testApiKey}>测试Key</button>
+            <button onClick={clearApiKey}>清除Key</button>
+          </div>
+          {deepSeekTest && (
+            <div className="muted" style={{ marginTop: 8 }}>
+              DeepSeek测试: {deepSeekTest.ok ? "OK" : "FAIL"} | {deepSeekTest.message}
+            </div>
+          )}
+          <textarea value={question} onChange={(e) => setQuestion(e.target.value)} />
+          <div className="row" style={{ marginTop: 10 }}>
+            <label>会话ID:</label>
+            <input value={sessionId} onChange={(e) => setSessionId(e.target.value)} />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button disabled={loading} onClick={ask}>{loading ? "处理中..." : "提交问题"}</button>
+            <button disabled={loading} onClick={askStream}>{loading ? "流式处理中..." : "流式提问"}</button>
+            <button onClick={loadKnowledge}>刷新知识库</button>
+            <button onClick={loadMetrics}>刷新命中率</button>
+            <button onClick={loadSystemStatus}>刷新系统状态</button>
+            <button onClick={loadSystemPanel}>刷新数据面板</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>系统状态诊断</h3>
+          {!systemStatus && <div className="muted">暂无状态</div>}
+          {systemStatus && (
+            <ul>
+              <li>deepSeekEnabled: {String(systemStatus.deepSeekEnabled)}</li>
+              <li>deepSeekModel: {systemStatus.deepSeekModel}</li>
+              <li>embeddingOnlineEnabled: {String(systemStatus.embeddingOnlineEnabled)}</li>
+              <li>redisMemoryEnabled: {String(systemStatus.redisMemoryEnabled)}</li>
+              <li>redisReachable: {String(systemStatus.redisReachable)}</li>
+              <li>retrievalBackend: {systemStatus.retrievalBackend}</li>
+              <li>pgvectorReady: {String(systemStatus.pgvectorReady)}</li>
+              <li>activePromptVersion: {systemStatus.activePromptVersion}</li>
+            </ul>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>转发与会话数据面板</h3>
+          {!systemPanel && <div className="muted">暂无数据</div>}
+          {systemPanel && (
+            <div>
+              <div><b>L1转发URL:</b> <code>{systemPanel.l1Url || "-"}</code> / port={String(systemPanel.l1Port || "-")}</div>
+              <div><b>L2转发URL:</b> <code>{systemPanel.l2Url || "-"}</code> / port={String(systemPanel.l2Port || "-")}</div>
+
+              <h4>最近转发事件（含JSON）</h4>
+              <ul>
+                {(systemPanel.escalationEvents || []).map((e) => (
+                  <li key={e.id}>
+                    <div>#{e.id} ticket={e.ticketId} level={e.level} success={String(e.success)} time={e.createdAt}</div>
+                    <div>target: <code>{e.targetUrl}</code></div>
+                    <pre style={{ whiteSpace: "pre-wrap", background: "#f8fafc", padding: 8 }}>
+{e.payloadJson}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+
+              <h4>最近会话记录（后端持久化）</h4>
+              <ul>
+                {(systemPanel.conversationRecords || []).map((m) => (
+                  <li key={m.id}>
+                    [{m.createdAt}] session=<code>{m.sessionId}</code> role={m.role} content={m.content}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h3>知识库标题</h3>
+          <ul>
+            {knowledge.map((k) => <li key={k}>{k}</li>)}
+          </ul>
+          <div style={{ borderTop: "1px solid #eef2f7", marginTop: 10, paddingTop: 10 }}>
+            <div className="muted">给某个知识条目上传附件（仅允许 docx/pdf/png/jpeg）</div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <label>标题:</label>
+              <select value={attachTitle} onChange={(e) => setAttachTitle(e.target.value)}>
+                {knowledge.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+              <label>source:</label>
+              <code>{sourceFromTitle(attachTitle)}</code>
+            </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <input type="file" onChange={(e) => setAttachFile(e.target.files?.[0] || null)} />
+              <button disabled={loading} onClick={uploadAttachment}>{loading ? "上传中..." : "上传附件"}</button>
+            </div>
+            {attachResult && (
+              <div className="muted" style={{ marginTop: 8 }}>
+                上传结果: {attachResult.ok ? "OK" : "FAIL"} | {attachResult.message}
+                {attachResult.data && (
+                  <div>
+                    attachmentId=<code>{attachResult.data.id}</code> 下载URL=<code>{attachResult.data.downloadUrl}</code>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>最新工单响应</h3>
+          {!ticket && <div className="muted">尚未提交问题</div>}
+          {ticket && (
+            <div>
+              <div><b>工单ID：</b>{ticket.id}</div>
+              <div><b>状态：</b><span className="status">{ticket.status}</span></div>
+              <div><b>置信度：</b>{ticket.confidence}</div>
+              <div><b>回答：</b>{ticket.answer}</div>
+              <div><b>引用：</b></div>
+              <ul>
+                {(ticket.citations || []).map((c) => <li key={c}><code>{c}</code></li>)}
+              </ul>
+              <div><b>附件：</b></div>
+              {(!ticket.attachments || ticket.attachments.length === 0) && (
+                <div className="muted">（无附件，或当前为低置信转人工场景不返回附件）</div>
+              )}
+              {ticket.attachments && ticket.attachments.length > 0 && (
+                <ul>
+                  {ticket.attachments.map((a) => (
+                    <li key={a.id}>
+                      <div>
+                        <code>{a.contentType}</code> {a.fileName} ({a.sizeBytes} bytes)
+                        {" "}
+                        <a href={a.downloadUrl} target="_blank" rel="noreferrer">打开/下载</a>
+                      </div>
+                      {String(a.contentType || "").startsWith("image/") && (
+                        <div style={{ marginTop: 6 }}>
+                          <img src={a.downloadUrl} style={{ maxWidth: 420, borderRadius: 6, border: "1px solid #e5e7eb" }} />
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <b>流式回答：</b>
+            <div className="muted" style={{ whiteSpace: "pre-wrap" }}>
+              {streamAnswer || "尚未触发流式问答"}
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>Prompt版本管理</h3>
+          <div className="row">
+            <input
+              placeholder="回滚到版本号"
+              value={rollbackVersion}
+              onChange={(e) => setRollbackVersion(e.target.value)}
+            />
+            <button onClick={rollbackPrompt}>回滚Prompt</button>
+            <button onClick={loadPromptHistory}>刷新版本</button>
+          </div>
+          <ul>
+            {promptHistory.map((p) => (
+              <li key={p.id}>
+                v{p.versionNo} | active={String(p.active)} | note={p.changeNote || "-"}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="card">
+          <h3>命中率统计</h3>
+          {!metrics && <div className="muted">暂无统计</div>}
+          {metrics && (
+            <ul>
+              <li>totalQueries: {metrics.totalQueries}</li>
+              <li>retrievedQueries: {metrics.retrievedQueries}</li>
+              <li>rerankedQueries: {metrics.rerankedQueries}</li>
+              <li>resolvedByAi: {metrics.resolvedByAi}</li>
+              <li>retrievalHitRate: {metrics.retrievalHitRate}</li>
+              <li>rerankCoverageRate: {metrics.rerankCoverageRate}</li>
+              <li>aiResolutionRate: {metrics.aiResolutionRate}</li>
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

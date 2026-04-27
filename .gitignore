@@ -1,0 +1,13 @@
+target/
+data/attachments/
+
+# IDE
+.idea/
+*.iml
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

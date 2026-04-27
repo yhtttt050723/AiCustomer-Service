@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: ai-ticketing
+  datasource:
+    url: jdbc:h2:mem:ticketing;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:dummy}
+      chat:
+        options:
+          model: qwen-plus
+      embedding:
+        options:
+          model: text-embedding-v3
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+rag:
+  retrieval:
+    backend: memory
+
+deepseek:
+  base-url: https://api.deepseek.com
+  api-key: ${DEEPSEEK_API_KEY:}
+  model: ${DEEPSEEK_MODEL:deepseek-v4-pro}
+  reasoning-effort: high
+
+chat:
+  memory:
+    backend: redis
+    ttl-seconds: 604800
+
+handoff:
+  threshold:
+    resolve: 0.65
+    l2: 0.35
+  l1:
+    url: ${HANDOFF_L1_URL:http://localhost:8080/api/handoff/l1}
+  l2:
+    url: ${HANDOFF_L2_URL:http://localhost:8080/api/handoff/l2}
+
+attachments:
+  storage-dir: ${ATTACHMENTS_DIR:data/attachments}

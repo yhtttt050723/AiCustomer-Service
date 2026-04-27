@@ -1,0 +1,22 @@
+[
+  {
+    "question": "怎么请假",
+    "expectAutoResolved": true
+  },
+  {
+    "question": "PO号这个字段在哪里填写",
+    "expectAutoResolved": true
+  },
+  {
+    "question": "SKU-8821 同步失败怎么处理",
+    "expectAutoResolved": true
+  },
+  {
+    "question": "系统无法登录而且报错未知代码",
+    "expectAutoResolved": false
+  },
+  {
+    "question": "区域性故障时应该怎么做",
+    "expectAutoResolved": false
+  }
+]
