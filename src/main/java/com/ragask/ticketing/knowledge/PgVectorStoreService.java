@@ -2,28 +2,23 @@ package com.ragask.ticketing.knowledge;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class PgVectorStoreService {
 
     private final JdbcTemplate jdbcTemplate;
     private final EmbeddingService embeddingService;
-    private final String retrievalBackend;
+    @Value("${rag.retrieval.backend:memory}")
+    private String retrievalBackend;
     private final AtomicBoolean vectorReady = new AtomicBoolean(false);
     private final AtomicBoolean initialized = new AtomicBoolean(false);
-
-    public PgVectorStoreService(
-            JdbcTemplate jdbcTemplate,
-            EmbeddingService embeddingService,
-            @Value("${rag.retrieval.backend:memory}") String retrievalBackend
-    ) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.embeddingService = embeddingService;
-        this.retrievalBackend = retrievalBackend;
-    }
 
     public void indexDocument(KnowledgeDocument document) {
         if (!isPostgresBackend()) {
@@ -156,7 +151,8 @@ public class PgVectorStoreService {
         if (!initialized.get()) {
             try {
                 ensureSchema();
-            } catch (Exception ignored) {
+            } catch (Exception ex) {
+                log.warn("pgvector schema check failed");
                 return false;
             }
         }

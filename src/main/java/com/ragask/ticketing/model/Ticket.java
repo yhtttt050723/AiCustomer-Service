@@ -10,9 +10,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "tickets")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Ticket {
 
     @Id
@@ -27,6 +36,7 @@ public class Ticket {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
+    @Default
     private TicketStatus status = TicketStatus.NEW;
 
     @Column(nullable = false)
@@ -35,63 +45,22 @@ public class Ticket {
     @Column(length = 2000)
     private String latestSummary;
 
+    @Column(length = 100)
+    private String category;
+
     @Column(nullable = false)
+    private double lastConfidence;
+
+    @Column(length = 6000)
+    private String lastCitations;
+
+    @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime updatedAt = LocalDateTime.now();
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getQuestion() {
-        return question;
-    }
-
-    public void setQuestion(String question) {
-        this.question = question;
-    }
-
-    public String getAnswer() {
-        return answer;
-    }
-
-    public void setAnswer(String answer) {
-        this.answer = answer;
-    }
-
-    public TicketStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(TicketStatus status) {
-        this.status = status;
-    }
-
-    public boolean isHighValue() {
-        return highValue;
-    }
-
-    public void setHighValue(boolean highValue) {
-        this.highValue = highValue;
-    }
-
-    public String getLatestSummary() {
-        return latestSummary;
-    }
-
-    public void setLatestSummary(String latestSummary) {
-        this.latestSummary = latestSummary;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
 
     public void touch() {
         this.updatedAt = LocalDateTime.now();

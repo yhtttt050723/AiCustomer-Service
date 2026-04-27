@@ -8,12 +8,14 @@ import com.ragask.ticketing.model.dto.EscalationPayload;
 import com.ragask.ticketing.model.dto.RagAnswer;
 import com.ragask.ticketing.repository.EscalationEventRepository;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @Service
+@Slf4j
 public class EscalationDispatchService {
 
     private final WebClient webClient;
@@ -58,13 +60,30 @@ public class EscalationDispatchService {
         if (targetUrl == null || targetUrl.isBlank()) {
             return false;
         }
+        if ("L1".equals(level) && (ticket.getCategory() == null || ticket.getCategory().isBlank())) {
+            // L1 handoff requires category; if missing, do not dispatch.
+            saveEvent(ticket.getId(), level, targetUrl, new EscalationPayload(
+                    ticket.getId(),
+                    level,
+                    confidence,
+                    null,
+                    ticket.getQuestion(),
+                    ragAnswer.getAnswer(),
+                    ragAnswer.getCitations() == null ? List.of() : ragAnswer.getCitations(),
+                    ticket.getStatus(),
+                    ticket.getCreatedAt(),
+                    ticket.getUpdatedAt()
+            ), false);
+            return false;
+        }
         EscalationPayload payload = new EscalationPayload(
                 ticket.getId(),
                 level,
                 confidence,
+                ticket.getCategory(),
                 ticket.getQuestion(),
-                ragAnswer.answer(),
-                ragAnswer.citations() == null ? List.of() : ragAnswer.citations(),
+                ragAnswer.getAnswer(),
+                ragAnswer.getCitations() == null ? List.of() : ragAnswer.getCitations(),
                 ticket.getStatus(),
                 ticket.getCreatedAt(),
                 ticket.getUpdatedAt()
@@ -79,7 +98,8 @@ public class EscalationDispatchService {
                     .block();
             saveEvent(ticket.getId(), level, targetUrl, payload, true);
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("Escalation dispatch failed: ticketId={}, level={}, targetUrl={}", ticket.getId(), level, targetUrl, ex);
             saveEvent(ticket.getId(), level, targetUrl, payload, false);
             return false;
         }
@@ -106,8 +126,8 @@ public class EscalationDispatchService {
             event.setSuccess(success);
             event.setPayloadJson(toJson(payload));
             escalationEventRepository.save(event);
-        } catch (Exception ignored) {
-            // ignore audit persistence failure
+        } catch (Exception ex) {
+            log.warn("Failed to persist escalation audit event: ticketId={}, level={}", ticketId, level, ex);
         }
     }
 

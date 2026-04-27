@@ -7,9 +7,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "escalation_events")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class EscalationEvent {
 
     @Id
@@ -32,53 +41,6 @@ public class EscalationEvent {
     private String payloadJson;
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    public Long getId() {
-        return id;
-    }
-
-    public Long getTicketId() {
-        return ticketId;
-    }
-
-    public void setTicketId(Long ticketId) {
-        this.ticketId = ticketId;
-    }
-
-    public String getLevel() {
-        return level;
-    }
-
-    public void setLevel(String level) {
-        this.level = level;
-    }
-
-    public String getTargetUrl() {
-        return targetUrl;
-    }
-
-    public void setTargetUrl(String targetUrl) {
-        this.targetUrl = targetUrl;
-    }
-
-    public boolean isSuccess() {
-        return success;
-    }
-
-    public void setSuccess(boolean success) {
-        this.success = success;
-    }
-
-    public String getPayloadJson() {
-        return payloadJson;
-    }
-
-    public void setPayloadJson(String payloadJson) {
-        this.payloadJson = payloadJson;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }

@@ -7,9 +7,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "knowledge_documents")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class KnowledgeDocument {
 
     @Id
@@ -26,48 +35,10 @@ public class KnowledgeDocument {
     private String source;
 
     @Column(nullable = false, length = 64)
+    @Default
     private String tenantId = "default";
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public void setSource(String source) {
-        this.source = source;
-    }
-
-    public String getTenantId() {
-        return tenantId;
-    }
-
-    public void setTenantId(String tenantId) {
-        this.tenantId = tenantId;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }

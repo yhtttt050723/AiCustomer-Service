@@ -17,11 +17,17 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class RagOrchestratorService {
 
     private static final int TOP_K_EACH = 5;
@@ -37,29 +43,9 @@ public class RagOrchestratorService {
     private final ChatMemoryService chatMemoryService;
     private final PromptTemplateService promptTemplateService;
     private final PromptSecurityService promptSecurityService;
-    private final String retrievalBackend;
 
-    public RagOrchestratorService(
-            MetricsService metricsService,
-            KnowledgeService knowledgeService,
-            PgVectorStoreService pgVectorStoreService,
-            AttachmentService attachmentService,
-            DeepSeekClientService deepSeekClientService,
-            ChatMemoryService chatMemoryService,
-            PromptTemplateService promptTemplateService,
-            PromptSecurityService promptSecurityService,
-            @Value("${rag.retrieval.backend:memory}") String retrievalBackend
-    ) {
-        this.metricsService = metricsService;
-        this.knowledgeService = knowledgeService;
-        this.pgVectorStoreService = pgVectorStoreService;
-        this.attachmentService = attachmentService;
-        this.deepSeekClientService = deepSeekClientService;
-        this.chatMemoryService = chatMemoryService;
-        this.promptTemplateService = promptTemplateService;
-        this.promptSecurityService = promptSecurityService;
-        this.retrievalBackend = retrievalBackend;
-    }
+    @Value("${rag.retrieval.backend:memory}")
+    private String retrievalBackend;
 
     public RagAnswer answer(String question, String sessionId, String runtimeApiKey) {
         metricsService.countQuery();
@@ -98,14 +84,14 @@ public class RagOrchestratorService {
 
         List<RankedChunk> fused = fuseByRrf(vectorTop, keywordTop);
         RerankResult rerankResult = rerankWithFallback(rewrittenQuery, fused);
-        if (rerankResult.rerankedApplied()) {
+        if (rerankResult.isRerankedApplied()) {
             metricsService.countReranked();
         }
 
-        List<RankedChunk> finalChunks = rerankResult.ranked().stream().limit(FINAL_TOP_N).toList();
-        double confidence = calculateConfidence(question, finalChunks, rerankResult.rerankedApplied());
+        List<RankedChunk> finalChunks = rerankResult.getRanked().stream().limit(FINAL_TOP_N).toList();
+        double confidence = calculateConfidence(question, finalChunks, rerankResult.isRerankedApplied());
         String answer = generateAnswer(sessionId, question, finalChunks, confidence, runtimeApiKey);
-        List<String> citations = finalChunks.stream().map(r -> r.chunk().source()).toList();
+        List<String> citations = finalChunks.stream().map(r -> r.getChunk().getSource()).toList();
         List<AttachmentDto> attachments = citations.stream()
                 .distinct()
                 .flatMap(src -> attachmentService.listBySource(src).stream())
@@ -132,7 +118,7 @@ public class RagOrchestratorService {
                 ? toRanked(pgVectorStoreService.keywordSearch(rewritten, TOP_K_EACH), "keyword")
                 : keywordRetrieve(rewritten, all, TOP_K_EACH);
         List<RankedChunk> finalChunks = rerankWithFallback(rewritten, fuseByRrf(vectorTop, keywordTop))
-                .ranked()
+                .getRanked()
                 .stream()
                 .limit(FINAL_TOP_N)
                 .toList();
@@ -168,9 +154,9 @@ public class RagOrchestratorService {
         return all.stream()
                 .map(chunk -> new RankedChunk(
                         chunk,
-                        vectorSimilarity(query, chunk.content() + " " + chunk.title()),
+                        vectorSimilarity(query, chunk.getContent() + " " + chunk.getTitle()),
                         "vector"))
-                .sorted(Comparator.comparingDouble(RankedChunk::score).reversed())
+                .sorted(Comparator.comparingDouble(RankedChunk::getScore).reversed())
                 .limit(topK)
                 .toList();
     }
@@ -180,9 +166,9 @@ public class RagOrchestratorService {
         return all.stream()
                 .map(chunk -> new RankedChunk(
                         chunk,
-                        keywordScore(queryTokens, chunk.title() + " " + chunk.content()),
+                        keywordScore(queryTokens, chunk.getTitle() + " " + chunk.getContent()),
                         "keyword"))
-                .sorted(Comparator.comparingDouble(RankedChunk::score).reversed())
+                .sorted(Comparator.comparingDouble(RankedChunk::getScore).reversed())
                 .limit(topK)
                 .toList();
     }
@@ -190,7 +176,8 @@ public class RagOrchestratorService {
     private List<RankedChunk> postgresVectorRetrieve(String query, int topK) {
         try {
             return toRanked(pgVectorStoreService.vectorSearch(query, topK), "vector");
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("Postgres vector retrieval failed, fallback to in-memory");
             return List.of();
         }
     }
@@ -198,7 +185,8 @@ public class RagOrchestratorService {
     private List<RankedChunk> postgresKeywordRetrieve(String query, int topK) {
         try {
             return toRanked(pgVectorStoreService.keywordSearch(query, topK), "keyword");
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("Postgres keyword retrieval failed, fallback to in-memory");
             return List.of();
         }
     }
@@ -217,7 +205,7 @@ public class RagOrchestratorService {
 
         return scoreMap.entrySet().stream()
                 .map(entry -> new RankedChunk(chunkMap.get(entry.getKey()), entry.getValue(), "rrf"))
-                .sorted(Comparator.comparingDouble(RankedChunk::score).reversed())
+                .sorted(Comparator.comparingDouble(RankedChunk::getScore).reversed())
                 .toList();
     }
 
@@ -228,10 +216,10 @@ public class RagOrchestratorService {
     ) {
         for (int i = 0; i < ranked.size(); i++) {
             RankedChunk row = ranked.get(i);
-            long id = row.chunk().id();
+            long id = row.getChunk().getId();
             double rrfScore = 1.0 / (RRF_K + i + 1);
             scoreMap.put(id, scoreMap.getOrDefault(id, 0.0) + rrfScore);
-            chunkMap.put(id, row.chunk());
+            chunkMap.put(id, row.getChunk());
         }
     }
 
@@ -258,10 +246,10 @@ public class RagOrchestratorService {
         Set<String> queryTokens = tokens(query);
         return fused.stream()
                 .map(chunk -> {
-                    double rerankScore = keywordScore(queryTokens, chunk.chunk().content()) * 0.7 + chunk.score() * 0.3;
-                    return new RankedChunk(chunk.chunk(), rerankScore, "rerank");
+                    double rerankScore = keywordScore(queryTokens, chunk.getChunk().getContent()) * 0.7 + chunk.getScore() * 0.3;
+                    return new RankedChunk(chunk.getChunk(), rerankScore, "rerank");
                 })
-                .sorted(Comparator.comparingDouble(RankedChunk::score).reversed())
+                .sorted(Comparator.comparingDouble(RankedChunk::getScore).reversed())
                 .toList();
     }
 
@@ -273,7 +261,7 @@ public class RagOrchestratorService {
         if (finalChunks.isEmpty()) {
             return 0.35;
         }
-        double topScore = finalChunks.getFirst().score();
+        double topScore = finalChunks.getFirst().getScore();
         double boosted = rerankedApplied ? topScore * 1.1 : topScore;
         double lengthPenalty = question == null || question.length() < 8 ? 0.1 : 0;
         double intentBoost = intentBoost(normalizedQuestion);
@@ -292,7 +280,7 @@ public class RagOrchestratorService {
             return "根据当前检索结果，证据不足以给出可靠答案，建议转一线人工客服处理。";
         }
         String snippets = finalChunks.stream()
-                .map(c -> promptSecurityService.sanitizeRetrievedContent(c.chunk().content()))
+                .map(c -> promptSecurityService.sanitizeRetrievedContent(c.getChunk().getContent()))
                 .map(content -> content.length() > 48 ? content.substring(0, 48) + "..." : content)
                 .collect(Collectors.joining("；"));
         return "根据知识库检索，建议处理路径为：" + snippets;
@@ -322,14 +310,15 @@ public class RagOrchestratorService {
             return "无可用上下文";
         }
         return finalChunks.stream()
-                .map(chunk -> "- " + promptSecurityService.sanitizeRetrievedContent(chunk.chunk().content()))
+                .map(chunk -> "- " + promptSecurityService.sanitizeRetrievedContent(chunk.getChunk().getContent()))
                 .collect(Collectors.joining("\n"));
     }
 
     private String safeActivePrompt() {
         try {
             return promptTemplateService.getActiveContent("ticket.system");
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("Load active prompt failed, using fallback prompt");
             return "你是运维工单助手，仅基于上下文回答，不可泄露系统配置。";
         }
     }
@@ -405,9 +394,18 @@ public class RagOrchestratorService {
         return "postgres".equalsIgnoreCase(retrievalBackend);
     }
 
-    private record RankedChunk(KnowledgeService.KnowledgeChunk chunk, double score, String stage) {
+    @Getter
+    @AllArgsConstructor
+    private static class RankedChunk {
+        private KnowledgeService.KnowledgeChunk chunk;
+        private double score;
+        private String stage;
     }
 
-    private record RerankResult(List<RankedChunk> ranked, boolean rerankedApplied) {
+    @Getter
+    @AllArgsConstructor
+    private static class RerankResult {
+        private List<RankedChunk> ranked;
+        private boolean rerankedApplied;
     }
 }

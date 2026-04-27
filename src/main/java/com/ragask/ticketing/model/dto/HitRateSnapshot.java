@@ -1,12 +1,21 @@
 package com.ragask.ticketing.model.dto;
 
-public record HitRateSnapshot(
-        long totalQueries,
-        long retrievedQueries,
-        long rerankedQueries,
-        long resolvedByAi,
-        double retrievalHitRate,
-        double rerankCoverageRate,
-        double aiResolutionRate
-) {
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * Retrieval and resolution metric snapshot.
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class HitRateSnapshot {
+    private long totalQueries;
+    private long retrievedQueries;
+    private long rerankedQueries;
+    private long resolvedByAi;
+    private double retrievalHitRate;
+    private double rerankCoverageRate;
+    private double aiResolutionRate;
 }

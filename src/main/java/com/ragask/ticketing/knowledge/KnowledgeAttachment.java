@@ -7,9 +7,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "knowledge_attachments")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class KnowledgeAttachment {
 
     @Id
@@ -36,54 +45,7 @@ public class KnowledgeAttachment {
     private long sizeBytes;
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getSource() {
-        return source;
-    }
-
-    public void setSource(String source) {
-        this.source = source;
-    }
-
-    public String getFileName() {
-        return fileName;
-    }
-
-    public void setFileName(String fileName) {
-        this.fileName = fileName;
-    }
-
-    public String getContentType() {
-        return contentType;
-    }
-
-    public void setContentType(String contentType) {
-        this.contentType = contentType;
-    }
-
-    public String getStoragePath() {
-        return storagePath;
-    }
-
-    public void setStoragePath(String storagePath) {
-        this.storagePath = storagePath;
-    }
-
-    public long getSizeBytes() {
-        return sizeBytes;
-    }
-
-    public void setSizeBytes(long sizeBytes) {
-        this.sizeBytes = sizeBytes;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }
 

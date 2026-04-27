@@ -4,6 +4,7 @@ public enum TicketStatus {
     NEW,
     AI_PROCESSING,
     WAITING_CUSTOMER_INPUT,
+    L1_NEEDS_CATEGORY,
     L1_ASSIGNED,
     L2_ASSIGNED,
     RESOLVED,

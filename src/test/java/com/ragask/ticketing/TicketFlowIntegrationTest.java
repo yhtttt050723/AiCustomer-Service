@@ -2,6 +2,7 @@ package com.ragask.ticketing;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ragask.ticketing.common.api.Result;
 import com.ragask.ticketing.model.dto.AskTicketRequest;
 import com.ragask.ticketing.model.dto.HitRateSnapshot;
 import com.ragask.ticketing.model.dto.ResolveTicketRequest;
@@ -35,61 +36,69 @@ class TicketFlowIntegrationTest {
     void shouldRunRagTestSet() throws Exception {
         List<TestCase> cases = loadCases();
         for (TestCase testCase : cases) {
-            ResponseEntity<TicketResponse> response = restTemplate.postForEntity(
+            ResponseEntity<String> response = restTemplate.postForEntity(
                     url("/api/tickets/ask"),
-                    new AskTicketRequest(testCase.question(), null),
-                    TicketResponse.class
+                    new AskTicketRequest(testCase.getQuestion(), null),
+                    String.class
             );
             Assertions.assertTrue(response.getStatusCode().is2xxSuccessful());
-            TicketResponse body = response.getBody();
+            Result<TicketResponse> wrapped = objectMapper.readValue(
+                    response.getBody(),
+                    new TypeReference<>() {}
+            );
+            TicketResponse body = wrapped.getData();
             Assertions.assertNotNull(body);
-            Assertions.assertNotNull(body.id());
-            Assertions.assertFalse(body.citations().isEmpty());
-            if (testCase.expectAutoResolved()) {
-                Assertions.assertEquals(TicketStatus.RESOLVED, body.status(), testCase.question());
+            Assertions.assertNotNull(body.getId());
+            Assertions.assertFalse(body.getCitations().isEmpty());
+            if (testCase.isExpectAutoResolved()) {
+                Assertions.assertEquals(TicketStatus.RESOLVED, body.getStatus(), testCase.getQuestion());
             } else {
-                Assertions.assertEquals(TicketStatus.L1_ASSIGNED, body.status(), testCase.question());
+                Assertions.assertEquals(TicketStatus.L1_ASSIGNED, body.getStatus(), testCase.getQuestion());
             }
         }
     }
 
     @Test
     void shouldIngestHighValueTicketToKnowledge() {
-        TicketResponse asked = restTemplate.postForObject(
+        String askedRaw = restTemplate.postForObject(
                 url("/api/tickets/ask"),
                 new AskTicketRequest("账号连续输错密码后怎么解锁", null),
-                TicketResponse.class
+                String.class
         );
-        Assertions.assertNotNull(asked);
+        Assertions.assertNotNull(askedRaw);
+        TicketResponse asked = unwrap(askedRaw, new TypeReference<Result<TicketResponse>>() {});
 
-        ResponseEntity<TicketResponse> resolved = restTemplate.exchange(
-                url("/api/tickets/" + asked.id() + "/resolve"),
+        ResponseEntity<String> resolved = restTemplate.exchange(
+                url("/api/tickets/" + asked.getId() + "/resolve"),
                 HttpMethod.POST,
                 new HttpEntity<>(new ResolveTicketRequest("已按后台解锁流程处理", true)),
-                TicketResponse.class
+                String.class
         );
         Assertions.assertTrue(resolved.getStatusCode().is2xxSuccessful());
-        Assertions.assertEquals(TicketStatus.RESOLVED, resolved.getBody().status());
+        TicketResponse resolvedBody = unwrap(resolved.getBody(), new TypeReference<Result<TicketResponse>>() {});
+        Assertions.assertEquals(TicketStatus.RESOLVED, resolvedBody.getStatus());
 
-        ResponseEntity<String[]> kbTitles = restTemplate.getForEntity(url("/api/knowledge/titles"), String[].class);
+        ResponseEntity<String> kbTitles = restTemplate.getForEntity(url("/api/knowledge/titles"), String.class);
         Assertions.assertTrue(kbTitles.getStatusCode().is2xxSuccessful());
-        Assertions.assertNotNull(kbTitles.getBody());
+        String[] titles = unwrap(kbTitles.getBody(), new TypeReference<Result<String[]>>() {});
+        Assertions.assertNotNull(titles);
         Assertions.assertTrue(
-                java.util.Arrays.stream(kbTitles.getBody()).anyMatch(title -> title.contains("ticket-")),
+                java.util.Arrays.stream(titles).anyMatch(title -> title.contains("ticket-")),
                 "expected ticket summary ingested to knowledge base"
         );
     }
 
     @Test
     void shouldExposeHitRateMetrics() {
-        restTemplate.postForEntity(url("/api/tickets/ask"), new AskTicketRequest("PO号在哪里", null), TicketResponse.class);
-        ResponseEntity<HitRateSnapshot> metrics = restTemplate.getForEntity(
+        restTemplate.postForEntity(url("/api/tickets/ask"), new AskTicketRequest("PO号在哪里", null), String.class);
+        ResponseEntity<String> metrics = restTemplate.getForEntity(
                 url("/api/tickets/metrics/hitrate"),
-                HitRateSnapshot.class
+                String.class
         );
         Assertions.assertTrue(metrics.getStatusCode().is2xxSuccessful());
-        Assertions.assertNotNull(metrics.getBody());
-        Assertions.assertTrue(metrics.getBody().totalQueries() >= 1);
+        HitRateSnapshot snapshot = unwrap(metrics.getBody(), new TypeReference<Result<HitRateSnapshot>>() {});
+        Assertions.assertNotNull(snapshot);
+        Assertions.assertTrue(snapshot.getTotalQueries() >= 1);
     }
 
     private List<TestCase> loadCases() throws Exception {
@@ -103,6 +112,27 @@ class TicketFlowIntegrationTest {
         return "http://localhost:" + port + path;
     }
 
-    private record TestCase(String question, boolean expectAutoResolved) {
+    private <T> T unwrap(String raw, TypeReference<Result<T>> type) {
+        try {
+            Result<T> wrapped = objectMapper.readValue(raw, type);
+            Assertions.assertNotNull(wrapped);
+            Assertions.assertEquals(200, wrapped.getCode(), "expected success result");
+            return wrapped.getData();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static class TestCase {
+        private String question;
+        private boolean expectAutoResolved;
+
+        public String getQuestion() {
+            return question;
+        }
+
+        public boolean isExpectAutoResolved() {
+            return expectAutoResolved;
+        }
     }
 }

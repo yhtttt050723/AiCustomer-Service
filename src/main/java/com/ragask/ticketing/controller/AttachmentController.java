@@ -2,6 +2,7 @@ package com.ragask.ticketing.controller;
 
 import com.ragask.ticketing.knowledge.AttachmentService;
 import com.ragask.ticketing.knowledge.KnowledgeAttachment;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -14,13 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/attachments")
+@RequiredArgsConstructor
 public class AttachmentController {
 
     private final AttachmentService attachmentService;
-
-    public AttachmentController(AttachmentService attachmentService) {
-        this.attachmentService = attachmentService;
-    }
 
     @GetMapping("/{id}")
     public ResponseEntity<Resource> download(@PathVariable("id") Long id) {

@@ -7,9 +7,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "conversation_records")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ConversationRecord {
 
     @Id
@@ -26,37 +35,6 @@ public class ConversationRecord {
     private String content;
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getSessionId() {
-        return sessionId;
-    }
-
-    public void setSessionId(String sessionId) {
-        this.sessionId = sessionId;
-    }
-
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }

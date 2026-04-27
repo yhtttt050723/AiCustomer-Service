@@ -4,19 +4,17 @@ import com.ragask.ticketing.model.PromptTemplateVersion;
 import com.ragask.ticketing.repository.PromptTemplateVersionRepository;
 import jakarta.annotation.PostConstruct;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@RequiredArgsConstructor
 public class PromptTemplateService {
 
     private final PromptTemplateVersionRepository repository;
-
-    public PromptTemplateService(PromptTemplateVersionRepository repository) {
-        this.repository = repository;
-    }
 
     @PostConstruct
     public void initDefaults() {

@@ -1,11 +1,13 @@
 package com.ragask.ticketing.knowledge;
 
 import java.util.Random;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class EmbeddingService {
 
     public static final int DIMENSION = 1536;
@@ -40,7 +42,8 @@ public class EmbeddingService {
         }
         try {
             return embeddingModel.embed(text == null ? "" : text);
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("Online embedding unavailable, fallback to local embedding");
             return null;
         }
     }

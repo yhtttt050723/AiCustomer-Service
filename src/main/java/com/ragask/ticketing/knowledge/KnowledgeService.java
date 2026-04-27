@@ -2,36 +2,49 @@ package com.ragask.ticketing.knowledge;
 
 import com.ragask.ticketing.model.dto.KnowledgeIngestRequest;
 import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class KnowledgeService {
 
-    public record KnowledgeChunk(Long id, String title, String content, String source) {
+    @Data
+    @AllArgsConstructor
+    public static class KnowledgeChunk {
+        private Long id;
+        private String title;
+        private String content;
+        private String source;
     }
 
     private final KnowledgeDocumentRepository repository;
     private final PgVectorStoreService pgVectorStoreService;
 
-    public KnowledgeService(
-            KnowledgeDocumentRepository repository,
-            PgVectorStoreService pgVectorStoreService
-    ) {
-        this.repository = repository;
-        this.pgVectorStoreService = pgVectorStoreService;
-    }
-
+    /**
+     * Ingest one knowledge document and index it to vector store.
+     *
+     * @param request ingest request
+     */
     public void ingest(KnowledgeIngestRequest request) {
         KnowledgeDocument document = new KnowledgeDocument();
-        document.setTitle(request.title());
-        document.setContent(request.content());
-        document.setSource("kb://manual/" + request.title().replace(" ", "-"));
+        document.setTitle(request.getTitle());
+        document.setContent(request.getContent());
+        document.setSource("kb://manual/" + request.getTitle().replace(" ", "-"));
         KnowledgeDocument saved = repository.save(document);
         pgVectorStoreService.indexDocument(saved);
     }
 
+    /**
+     * Ingest high-value ticket summary as knowledge.
+     *
+     * @param ticketId ticket id
+     * @param summary resolved summary
+     */
     public void ingestFromTicket(Long ticketId, String summary) {
         KnowledgeDocument document = new KnowledgeDocument();
         document.setTitle("ticket-" + ticketId + ": " + summary);
@@ -41,16 +54,29 @@ public class KnowledgeService {
         pgVectorStoreService.indexDocument(saved);
     }
 
+    /**
+     * List all knowledge titles.
+     *
+     * @return title list
+     */
     public List<String> listTitles() {
         return repository.findAll().stream().map(KnowledgeDocument::getTitle).toList();
     }
 
+    /**
+     * List all chunks for retrieval.
+     *
+     * @return knowledge chunks
+     */
     public List<KnowledgeChunk> listChunks() {
         return repository.findAll().stream()
                 .map(doc -> new KnowledgeChunk(doc.getId(), doc.getTitle(), doc.getContent(), doc.getSource()))
                 .toList();
     }
 
+    /**
+     * Preload sample knowledge on first startup.
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void preload() {
         if (repository.count() > 0) {

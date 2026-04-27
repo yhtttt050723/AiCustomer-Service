@@ -1,13 +1,22 @@
 package com.ragask.ticketing.model.dto;
 
-public record SystemStatusResponse(
-        boolean deepSeekEnabled,
-        String deepSeekModel,
-        boolean embeddingOnlineEnabled,
-        boolean redisMemoryEnabled,
-        boolean redisReachable,
-        String retrievalBackend,
-        boolean pgvectorReady,
-        Integer activePromptVersion
-) {
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * System status response payload.
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class SystemStatusResponse {
+    private boolean deepSeekEnabled;
+    private String deepSeekModel;
+    private boolean embeddingOnlineEnabled;
+    private boolean redisMemoryEnabled;
+    private boolean redisReachable;
+    private String retrievalBackend;
+    private boolean pgvectorReady;
+    private Integer activePromptVersion;
 }

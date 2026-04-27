@@ -8,33 +8,25 @@ import com.ragask.ticketing.repository.ConversationRecordRepository;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class ChatMemoryService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final String backend;
-    private final long ttlSeconds;
     private final ConversationRecordRepository conversationRecordRepository;
     private final List<ChatMessage> fallbackMemory = new ArrayList<>();
-
-    public ChatMemoryService(
-            StringRedisTemplate redisTemplate,
-            ObjectMapper objectMapper,
-            ConversationRecordRepository conversationRecordRepository,
-            @Value("${chat.memory.backend:redis}") String backend,
-            @Value("${chat.memory.ttl-seconds:604800}") long ttlSeconds
-    ) {
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
-        this.conversationRecordRepository = conversationRecordRepository;
-        this.backend = backend;
-        this.ttlSeconds = ttlSeconds;
-    }
+    @Value("${chat.memory.backend:redis}")
+    private String backend;
+    @Value("${chat.memory.ttl-seconds:604800}")
+    private long ttlSeconds;
 
     public List<ChatMessage> recent(String sessionId, int limit) {
         if (!useRedis()) {
@@ -52,7 +44,8 @@ public class ChatMemoryService {
                 return List.of();
             }
             return rows.stream().map(this::decode).toList();
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("Read chat memory from Redis failed, sessionId={}", sessionId, ex);
             return List.of();
         }
     }
@@ -66,7 +59,8 @@ public class ChatMemoryService {
             String key = key(sessionId);
             redisTemplate.opsForList().rightPush(key, encode(message));
             redisTemplate.expire(key, Duration.ofSeconds(ttlSeconds));
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.warn("Write chat memory to Redis failed, fallback to in-memory, sessionId={}", sessionId, ex);
             fallbackMemory.add(message);
         }
         saveRecord(sessionId, message);
@@ -83,7 +77,8 @@ public class ChatMemoryService {
         try {
             redisTemplate.opsForValue().set("health:redis", "ok", Duration.ofSeconds(10));
             return true;
-        } catch (Exception ignored) {
+        } catch (Exception ex) {
+            log.debug("Redis health probe failed", ex);
             return false;
         }
     }
@@ -100,7 +95,7 @@ public class ChatMemoryService {
         try {
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException e) {
-            return "{\"role\":\"" + message.role() + "\",\"content\":\"" + message.content() + "\"}";
+            return "{\"role\":\"" + message.getRole() + "\",\"content\":\"" + message.getContent() + "\"}";
         }
     }
 
@@ -116,11 +111,11 @@ public class ChatMemoryService {
         try {
             ConversationRecord record = new ConversationRecord();
             record.setSessionId(sessionId);
-            record.setRole(message.role());
-            record.setContent(message.content());
+            record.setRole(message.getRole());
+            record.setContent(message.getContent());
             conversationRecordRepository.save(record);
-        } catch (Exception ignored) {
-            // keep chat flow even if audit persistence fails
+        } catch (Exception ex) {
+            log.warn("Persist conversation record failed, sessionId={}", sessionId, ex);
         }
     }
 }

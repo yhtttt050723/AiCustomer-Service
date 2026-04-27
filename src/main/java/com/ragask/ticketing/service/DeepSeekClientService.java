@@ -3,10 +3,13 @@ package com.ragask.ticketing.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ragask.ticketing.model.dto.ChatMessage;
+import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -14,26 +17,25 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
 @Service
+@Slf4j
+@RequiredArgsConstructor
 public class DeepSeekClientService {
 
-    private final WebClient webClient;
+    private final WebClient.Builder webClientBuilder;
     private final ObjectMapper objectMapper;
-    private final String apiKey;
-    private final String model;
-    private final String reasoningEffort;
+    @Value("${deepseek.base-url:https://api.deepseek.com}")
+    private String baseUrl;
+    @Value("${deepseek.api-key:}")
+    private String apiKey;
+    @Value("${deepseek.model:deepseek-v4-pro}")
+    private String model;
+    @Value("${deepseek.reasoning-effort:high}")
+    private String reasoningEffort;
+    private WebClient webClient;
 
-    public DeepSeekClientService(
-            ObjectMapper objectMapper,
-            @Value("${deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-            @Value("${deepseek.api-key:}") String apiKey,
-            @Value("${deepseek.model:deepseek-v4-pro}") String model,
-            @Value("${deepseek.reasoning-effort:high}") String reasoningEffort
-    ) {
-        this.objectMapper = objectMapper;
-        this.apiKey = apiKey;
-        this.model = model;
-        this.reasoningEffort = reasoningEffort;
-        this.webClient = WebClient.builder().baseUrl(baseUrl).build();
+    @PostConstruct
+    void initClient() {
+        this.webClient = webClientBuilder.baseUrl(baseUrl).build();
     }
 
     public boolean enabled() {
@@ -116,7 +118,7 @@ public class DeepSeekClientService {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
         for (ChatMessage item : history) {
-            messages.add(Map.of("role", item.role(), "content", item.content()));
+                messages.add(Map.of("role", item.getRole(), "content", item.getContent()));
         }
         messages.add(Map.of("role", "user", "content", userPrompt));
 
@@ -147,8 +149,8 @@ public class DeepSeekClientService {
                 if (!delta.isMissingNode()) {
                     out.append(delta.asText());
                 }
-            } catch (Exception ignored) {
-                // best-effort streaming parsing
+            } catch (Exception ex) {
+                log.debug("Ignore malformed DeepSeek stream chunk: {}", body, ex);
             }
         }
         return out.toString();

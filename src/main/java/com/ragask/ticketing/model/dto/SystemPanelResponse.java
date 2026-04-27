@@ -3,13 +3,21 @@ package com.ragask.ticketing.model.dto;
 import com.ragask.ticketing.model.ConversationRecord;
 import com.ragask.ticketing.model.EscalationEvent;
 import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-public record SystemPanelResponse(
-        String l1Url,
-        String l2Url,
-        Integer l1Port,
-        Integer l2Port,
-        List<EscalationEvent> escalationEvents,
-        List<ConversationRecord> conversationRecords
-) {
+/**
+ * System panel response payload.
+ */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class SystemPanelResponse {
+    private String l1Url;
+    private String l2Url;
+    private Integer l1Port;
+    private Integer l2Port;
+    private List<EscalationEvent> escalationEvents;
+    private List<ConversationRecord> conversationRecords;
 }

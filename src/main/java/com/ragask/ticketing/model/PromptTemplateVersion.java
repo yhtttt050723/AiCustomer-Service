@@ -7,9 +7,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "prompt_template_versions")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PromptTemplateVersion {
 
     @Id
@@ -29,56 +38,9 @@ public class PromptTemplateVersion {
     private boolean active;
 
     @Column(nullable = false)
+    @Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
     @Column(length = 255)
     private String changeNote;
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getPromptKey() {
-        return promptKey;
-    }
-
-    public void setPromptKey(String promptKey) {
-        this.promptKey = promptKey;
-    }
-
-    public Integer getVersionNo() {
-        return versionNo;
-    }
-
-    public void setVersionNo(Integer versionNo) {
-        this.versionNo = versionNo;
-    }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public String getChangeNote() {
-        return changeNote;
-    }
-
-    public void setChangeNote(String changeNote) {
-        this.changeNote = changeNote;
-    }
 }

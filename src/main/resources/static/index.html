@@ -43,10 +43,23 @@
     const [attachTitle, setAttachTitle] = useState("");
     const [attachFile, setAttachFile] = useState(null);
     const [attachResult, setAttachResult] = useState(null);
+    const [l1Category, setL1Category] = useState("");
+    const [handoffResult, setHandoffResult] = useState(null);
+
+    const unwrapResult = async (res) => {
+      const json = await res.json();
+      if (!json || typeof json.code !== "number") {
+        throw new Error("invalid Result<T> response");
+      }
+      if (json.code !== 200) {
+        throw new Error(json.message || "request failed");
+      }
+      return json.data;
+    };
 
     const loadKnowledge = async () => {
       const res = await fetch("/api/knowledge/titles");
-      const items = await res.json();
+      const items = await unwrapResult(res);
       setKnowledge(items);
       if (!attachTitle && items && items.length > 0) {
         setAttachTitle(items[0]);
@@ -55,34 +68,38 @@
 
     const loadMetrics = async () => {
       const res = await fetch("/api/tickets/metrics/hitrate");
-      setMetrics(await res.json());
+      setMetrics(await unwrapResult(res));
     };
 
     const loadSystemStatus = async () => {
       const res = await fetch("/api/system/status");
-      setSystemStatus(await res.json());
+      setSystemStatus(await unwrapResult(res));
     };
 
     const loadPromptHistory = async () => {
       const res = await fetch("/api/prompts/history?key=ticket.system");
-      setPromptHistory(await res.json());
+      setPromptHistory(await unwrapResult(res));
     };
 
     const loadSystemPanel = async () => {
       const res = await fetch("/api/system/panel");
-      setSystemPanel(await res.json());
+      setSystemPanel(await unwrapResult(res));
     };
 
     const ask = async () => {
       setLoading(true);
+      setHandoffResult(null);
       try {
         const res = await fetch("/api/tickets/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question, apiKey: runtimeApiKey })
         });
-        const data = await res.json();
+        const data = await unwrapResult(res);
         setTicket(data);
+        if (data && data.status === "L1_NEEDS_CATEGORY") {
+          setL1Category("");
+        }
         await loadMetrics();
       } finally {
         setLoading(false);
@@ -91,6 +108,7 @@
 
     const askStream = async () => {
       setLoading(true);
+      setHandoffResult(null);
       setStreamAnswer("");
       try {
         const res = await fetch("/api/tickets/ask/stream", {
@@ -110,9 +128,34 @@
       }
     };
 
+    const handoffL1WithCategory = async () => {
+      if (!ticket || !ticket.id) return;
+      if (!l1Category) {
+        alert("问题分类为必选项");
+        return;
+      }
+      setLoading(true);
+      setHandoffResult(null);
+      try {
+        const res = await fetch(`/api/tickets/${ticket.id}/handoff/l1`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: "low confidence -> L1 handoff", category: l1Category })
+        });
+        const data = await unwrapResult(res);
+        setTicket(data);
+        setHandoffResult({ ok: true, message: "已提交一线转接（含分类）" });
+        await loadSystemPanel();
+      } catch (e) {
+        setHandoffResult({ ok: false, message: String(e) });
+      } finally {
+        setLoading(false);
+      }
+    };
+
     const rollbackPrompt = async () => {
       if (!rollbackVersion) return;
-      await fetch("/api/prompts/rollback", {
+      const res = await fetch("/api/prompts/rollback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -121,6 +164,7 @@
           changeNote: "rollback from frontend"
         })
       });
+      await unwrapResult(res);
       await loadPromptHistory();
       await loadSystemStatus();
     };
@@ -148,13 +192,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ apiKey: runtimeApiKey })
         });
-        if (!res.ok) {
-          const text = await res.text();
-          setDeepSeekTest({ ok: false, message: text });
-          return;
-        }
-        const text = await res.text();
-        setDeepSeekTest({ ok: true, message: text });
+        const data = await unwrapResult(res);
+        setDeepSeekTest({ ok: true, message: String(data) });
         alert("DeepSeek Key 测试成功");
       } catch (e) {
         setDeepSeekTest({ ok: false, message: String(e) });
@@ -192,7 +231,7 @@
           setAttachResult({ ok: false, message: text });
           return;
         }
-        const data = await res.json();
+        const data = await unwrapResult(res);
         setAttachResult({ ok: true, message: "上传成功", data });
       } catch (e) {
         setAttachResult({ ok: false, message: String(e) });
@@ -329,11 +368,41 @@
               <div><b>工单ID：</b>{ticket.id}</div>
               <div><b>状态：</b><span className="status">{ticket.status}</span></div>
               <div><b>置信度：</b>{ticket.confidence}</div>
+              <div><b>问题分类：</b>{ticket.category ? <code>{ticket.category}</code> : <span className="muted">（未分类）</span>}</div>
               <div><b>回答：</b>{ticket.answer}</div>
               <div><b>引用：</b></div>
               <ul>
                 {(ticket.citations || []).map((c) => <li key={c}><code>{c}</code></li>)}
               </ul>
+
+              {ticket.status === "L1_NEEDS_CATEGORY" && (
+                <div style={{ borderTop: "1px solid #eef2f7", marginTop: 10, paddingTop: 10 }}>
+                  <div className="muted">
+                    当前为低置信度转一线场景，且 AI 未能自动分类。请先选择“问题分类”（必选），再提交转接。
+                  </div>
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <label><b>问题分类（必选）</b>：</label>
+                    <select value={l1Category} onChange={(e) => setL1Category(e.target.value)}>
+                      <option value="">请选择</option>
+                      <option value="人事/假期">人事/假期</option>
+                      <option value="采购/订单">采购/订单</option>
+                      <option value="库存/同步">库存/同步</option>
+                      <option value="发版/回滚">发版/回滚</option>
+                      <option value="账号/权限">账号/权限</option>
+                      <option value="其他">其他</option>
+                    </select>
+                    <button disabled={loading} onClick={handoffL1WithCategory}>
+                      {loading ? "提交中..." : "提交一线转接"}
+                    </button>
+                  </div>
+                  {handoffResult && (
+                    <div className="muted" style={{ marginTop: 6 }}>
+                      转接结果: {handoffResult.ok ? "OK" : "FAIL"} | {handoffResult.message}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div><b>附件：</b></div>
               {(!ticket.attachments || ticket.attachments.length === 0) && (
                 <div className="muted">（无附件，或当前为低置信转人工场景不返回附件）</div>
