@@ -8,6 +8,9 @@ data/attachments/
 # Project docs (keep README.md tracked)
 AI工单系统技术选型建议.md
 AI工单系统技术选型与流程图.md
+ROADMAP.md
+api-design.mdc
+java-base.mdc
 
 # OS
 Thumbs.db
