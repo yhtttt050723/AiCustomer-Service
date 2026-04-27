@@ -5,6 +5,10 @@ data/attachments/
 .idea/
 *.iml
 
+# Project docs (keep README.md tracked)
+AI工单系统技术选型建议.md
+AI工单系统技术选型与流程图.md
+
 # OS
 Thumbs.db
 desktop.ini
