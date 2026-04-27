@@ -17,6 +17,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 
@@ -38,7 +39,7 @@ class TicketFlowIntegrationTest {
         for (TestCase testCase : cases) {
             ResponseEntity<String> response = restTemplate.postForEntity(
                     url("/api/tickets/ask"),
-                    new AskTicketRequest(testCase.getQuestion(), null),
+                    authorizedEntity(new AskTicketRequest(testCase.getQuestion(), null)),
                     String.class
             );
             Assertions.assertTrue(response.getStatusCode().is2xxSuccessful());
@@ -62,7 +63,7 @@ class TicketFlowIntegrationTest {
     void shouldIngestHighValueTicketToKnowledge() {
         String askedRaw = restTemplate.postForObject(
                 url("/api/tickets/ask"),
-                new AskTicketRequest("账号连续输错密码后怎么解锁", null),
+                authorizedEntity(new AskTicketRequest("账号连续输错密码后怎么解锁", null)),
                 String.class
         );
         Assertions.assertNotNull(askedRaw);
@@ -71,14 +72,19 @@ class TicketFlowIntegrationTest {
         ResponseEntity<String> resolved = restTemplate.exchange(
                 url("/api/tickets/" + asked.getId() + "/resolve"),
                 HttpMethod.POST,
-                new HttpEntity<>(new ResolveTicketRequest("已按后台解锁流程处理", true)),
+                authorizedEntity(new ResolveTicketRequest("已按后台解锁流程处理", true)),
                 String.class
         );
         Assertions.assertTrue(resolved.getStatusCode().is2xxSuccessful());
         TicketResponse resolvedBody = unwrap(resolved.getBody(), new TypeReference<Result<TicketResponse>>() {});
         Assertions.assertEquals(TicketStatus.RESOLVED, resolvedBody.getStatus());
 
-        ResponseEntity<String> kbTitles = restTemplate.getForEntity(url("/api/knowledge/titles"), String.class);
+        ResponseEntity<String> kbTitles = restTemplate.exchange(
+                url("/api/knowledge/titles"),
+                HttpMethod.GET,
+                authorizedEntity(null),
+                String.class
+        );
         Assertions.assertTrue(kbTitles.getStatusCode().is2xxSuccessful());
         String[] titles = unwrap(kbTitles.getBody(), new TypeReference<Result<String[]>>() {});
         Assertions.assertNotNull(titles);
@@ -90,9 +96,11 @@ class TicketFlowIntegrationTest {
 
     @Test
     void shouldExposeHitRateMetrics() {
-        restTemplate.postForEntity(url("/api/tickets/ask"), new AskTicketRequest("PO号在哪里", null), String.class);
-        ResponseEntity<String> metrics = restTemplate.getForEntity(
+        restTemplate.postForEntity(url("/api/tickets/ask"), authorizedEntity(new AskTicketRequest("PO号在哪里", null)), String.class);
+        ResponseEntity<String> metrics = restTemplate.exchange(
                 url("/api/tickets/metrics/hitrate"),
+                HttpMethod.GET,
+                authorizedEntity(null),
                 String.class
         );
         Assertions.assertTrue(metrics.getStatusCode().is2xxSuccessful());
@@ -110,6 +118,12 @@ class TicketFlowIntegrationTest {
 
     private String url(String path) {
         return "http://localhost:" + port + path;
+    }
+
+    private <T> HttpEntity<T> authorizedEntity(T body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth("dev-user-token");
+        return new HttpEntity<>(body, headers);
     }
 
     private <T> T unwrap(String raw, TypeReference<Result<T>> type) {

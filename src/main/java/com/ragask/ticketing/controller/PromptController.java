@@ -8,6 +8,7 @@ import com.ragask.ticketing.service.PromptTemplateService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,16 +24,19 @@ public class PromptController {
     private final PromptTemplateService promptTemplateService;
 
     @GetMapping("/active")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<String> active(@RequestParam String key) {
         return Result.ok(promptTemplateService.getActiveContent(key));
     }
 
     @GetMapping("/history")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<List<PromptTemplateVersion>> history(@RequestParam String key) {
         return Result.ok(promptTemplateService.history(key));
     }
 
     @PostMapping("/versions")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<PromptTemplateVersion> create(@Valid @RequestBody PromptVersionRequest request) {
         return Result.ok(promptTemplateService.createVersion(
                 request.getPromptKey(),
@@ -43,6 +47,7 @@ public class PromptController {
     }
 
     @PostMapping("/rollback")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<PromptTemplateVersion> rollback(@Valid @RequestBody PromptRollbackRequest request) {
         return Result.ok(promptTemplateService.rollback(request.getPromptKey(), request.getTargetVersion(), request.getChangeNote()));
     }

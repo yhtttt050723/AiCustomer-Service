@@ -49,6 +49,9 @@ public class Ticket {
     private String category;
 
     @Column(nullable = false)
+    private Long createdByUserId;
+
+    @Column(nullable = false)
     private double lastConfidence;
 
     @Column(length = 6000)

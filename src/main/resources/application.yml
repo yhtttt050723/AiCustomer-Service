@@ -65,3 +65,13 @@ handoff:
 
 attachments:
   storage-dir: ${ATTACHMENTS_DIR:data/attachments}
+
+security:
+  auth:
+    tokens:
+      - token: ${APP_USER_TOKEN:dev-user-token}
+        user-id: 10001
+        roles: [USER]
+      - token: ${APP_ADMIN_TOKEN:dev-admin-token}
+        user-id: 90001
+        roles: [ADMIN]

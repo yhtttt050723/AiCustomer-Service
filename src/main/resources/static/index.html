@@ -37,6 +37,7 @@
     const [streamAnswer, setStreamAnswer] = useState("");
     const [sessionId, setSessionId] = useState("u001");
     const [runtimeApiKey, setRuntimeApiKey] = useState(localStorage.getItem("deepseek_api_key") || "");
+    const [accessToken, setAccessToken] = useState(localStorage.getItem("access_token") || "dev-user-token");
     const [deepSeekTest, setDeepSeekTest] = useState(null);
     const [rollbackVersion, setRollbackVersion] = useState("");
     const [loading, setLoading] = useState(false);
@@ -57,8 +58,13 @@
       return json.data;
     };
 
+    const authHeaders = (extra = {}) => ({
+      ...extra,
+      Authorization: `Bearer ${accessToken || ""}`
+    });
+
     const loadKnowledge = async () => {
-      const res = await fetch("/api/knowledge/titles");
+      const res = await fetch("/api/knowledge/titles", { headers: authHeaders() });
       const items = await unwrapResult(res);
       setKnowledge(items);
       if (!attachTitle && items && items.length > 0) {
@@ -67,22 +73,22 @@
     };
 
     const loadMetrics = async () => {
-      const res = await fetch("/api/tickets/metrics/hitrate");
+      const res = await fetch("/api/tickets/metrics/hitrate", { headers: authHeaders() });
       setMetrics(await unwrapResult(res));
     };
 
     const loadSystemStatus = async () => {
-      const res = await fetch("/api/system/status");
+      const res = await fetch("/api/system/status", { headers: authHeaders() });
       setSystemStatus(await unwrapResult(res));
     };
 
     const loadPromptHistory = async () => {
-      const res = await fetch("/api/prompts/history?key=ticket.system");
+      const res = await fetch("/api/prompts/history?key=ticket.system", { headers: authHeaders() });
       setPromptHistory(await unwrapResult(res));
     };
 
     const loadSystemPanel = async () => {
-      const res = await fetch("/api/system/panel");
+      const res = await fetch("/api/system/panel", { headers: authHeaders() });
       setSystemPanel(await unwrapResult(res));
     };
 
@@ -92,7 +98,7 @@
       try {
         const res = await fetch("/api/tickets/ask", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ question, apiKey: runtimeApiKey })
         });
         const data = await unwrapResult(res);
@@ -113,7 +119,7 @@
       try {
         const res = await fetch("/api/tickets/ask/stream", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ question, sessionId, apiKey: runtimeApiKey })
         });
         const reader = res.body.getReader();
@@ -139,7 +145,7 @@
       try {
         const res = await fetch(`/api/tickets/${ticket.id}/handoff/l1`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ reason: "low confidence -> L1 handoff", category: l1Category })
         });
         const data = await unwrapResult(res);
@@ -157,7 +163,7 @@
       if (!rollbackVersion) return;
       const res = await fetch("/api/prompts/rollback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           promptKey: "ticket.system",
           targetVersion: Number(rollbackVersion),
@@ -181,6 +187,11 @@
       alert("DeepSeek API Key 已从浏览器本地存储清除");
     };
 
+    const saveAccessToken = () => {
+      localStorage.setItem("access_token", accessToken || "");
+      alert("访问Token已保存到浏览器本地存储");
+    };
+
     const testApiKey = async () => {
       if (!runtimeApiKey) {
         setDeepSeekTest({ ok: false, message: "未填写 API Key" });
@@ -189,7 +200,7 @@
       try {
         const res = await fetch("/api/system/deepseek/test", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ apiKey: runtimeApiKey })
         });
         const data = await unwrapResult(res);
@@ -225,7 +236,11 @@
         const fd = new FormData();
         fd.append("source", sourceFromTitle(attachTitle));
         fd.append("file", attachFile);
-        const res = await fetch("/api/knowledge/attachments/upload", { method: "POST", body: fd });
+        const res = await fetch("/api/knowledge/attachments/upload", {
+          method: "POST",
+          headers: authHeaders(),
+          body: fd
+        });
         if (!res.ok) {
           const text = await res.text();
           setAttachResult({ ok: false, message: text });
@@ -245,6 +260,17 @@
         <h2>AI 工单系统（React 联调页）</h2>
         <div className="card">
           <div className="muted">流程：客户提问 -> AI回答 -> 低置信度转一线 -> 一线可升级二线</div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <label>访问Token:</label>
+            <input
+              type="password"
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+              placeholder="默认 dev-user-token"
+              style={{ minWidth: 280 }}
+            />
+            <button onClick={saveAccessToken}>保存Token</button>
+          </div>
           <div className="row" style={{ marginTop: 10 }}>
             <label>DeepSeek API Key:</label>
             <input

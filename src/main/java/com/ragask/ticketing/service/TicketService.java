@@ -7,6 +7,7 @@ import com.ragask.ticketing.model.dto.RagAnswer;
 import com.ragask.ticketing.model.dto.TicketResponse;
 import com.ragask.ticketing.model.enums.TicketStatus;
 import com.ragask.ticketing.repository.TicketRepository;
+import com.ragask.ticketing.security.UserContext;
 import com.ragask.ticketing.common.error.BizException;
 import com.ragask.ticketing.common.error.ErrorCode;
 import java.util.List;
@@ -42,9 +43,11 @@ public class TicketService {
      * @return ticket response after AI decision (resolved or escalated)
      */
     public TicketResponse ask(String question, String runtimeApiKey) {
+        Long currentUserId = requireCurrentUserId();
         Ticket ticket = new Ticket();
         ticket.setQuestion(question);
         ticket.setStatus(TicketStatus.AI_PROCESSING);
+        ticket.setCreatedByUserId(currentUserId);
         ticket = ticketRepository.save(ticket);
         String sessionId = "ticket-" + ticket.getId();
 
@@ -172,14 +175,24 @@ public class TicketService {
      * @return ticket list
      */
     public List<TicketResponse> list() {
-        return ticketRepository.findAll().stream()
+        Long currentUserId = requireCurrentUserId();
+        return ticketRepository.findByCreatedByUserIdOrderByUpdatedAtDesc(currentUserId).stream()
                 .map(ticket -> map(ticket, List.of(), List.of(), ticket.getCategory(), 0D))
                 .toList();
     }
 
     private Ticket get(Long id) {
-        return ticketRepository.findById(id)
+        Long currentUserId = requireCurrentUserId();
+        return ticketRepository.findByIdAndCreatedByUserId(id, currentUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "ticket not found"));
+    }
+
+    private Long requireCurrentUserId() {
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "unauthorized");
+        }
+        return currentUserId;
     }
 
     private TicketResponse map(

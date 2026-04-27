@@ -1,6 +1,7 @@
 package com.ragask.ticketing.controller;
 
 import com.ragask.ticketing.model.dto.EscalationPayload;
+import com.ragask.ticketing.security.PublicApi;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/handoff")
+@PublicApi
 public class HandoffMockController {
 
     @PostMapping("/l1")
